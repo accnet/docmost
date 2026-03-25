@@ -39,7 +39,7 @@ import { formattedDate } from "@/lib/time.ts";
 import { PageStateSegmentedControl } from "@/features/user/components/page-state-pref.tsx";
 import MovePageModal from "@/features/page/components/move-page-modal.tsx";
 import { useTimeAgo } from "@/hooks/use-time-ago.tsx";
-import { PageShareModal } from "@/ee/page-permission";
+import { PageShareModal } from "@/oss/page-permission";
 
 interface PageHeaderMenuProps {
   readOnly?: boolean;

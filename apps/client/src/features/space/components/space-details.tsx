@@ -18,7 +18,7 @@ import {
   ResponsiveSettingsControl,
   ResponsiveSettingsRow,
 } from "@/components/ui/responsive-settings-row.tsx";
-import SpacePublicSharingToggle from "@/ee/security/components/space-public-sharing-toggle.tsx";
+import SpacePublicSharingToggle from "@/oss/security/components/space-public-sharing-toggle.tsx";
 
 interface SpaceDetailsProps {
   spaceId: string;

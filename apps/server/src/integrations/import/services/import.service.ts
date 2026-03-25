@@ -153,7 +153,7 @@ export class ImportService {
     let DocxImportModule: any;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      DocxImportModule = require('./../../../ee/docx-import/docx-import.service');
+      DocxImportModule = require('./../../../../oss/docx-import/docx-import.service');
     } catch (err) {
       this.logger.error(
         'DOCX import requested but EE module not bundled in this build',

@@ -117,7 +117,7 @@ export class SearchController {
     let TypesenseModule: any;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      TypesenseModule = require('./../../ee/typesense/services/page-search.service');
+      TypesenseModule = require('./../../../oss/typesense/services/page-search.service');
 
       const PageSearchService = this.moduleRef.get(
         TypesenseModule.PageSearchService,

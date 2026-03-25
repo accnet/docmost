@@ -2,16 +2,16 @@ import { queryClient } from "@/main.tsx";
 import {
   getBilling,
   getBillingPlans,
-} from "@/ee/billing/services/billing-service.ts";
+} from "@/oss/billing/services/billing-service.ts";
 import { getSpaces } from "@/features/space/services/space-service.ts";
 import { getGroups } from "@/features/group/services/group-service.ts";
 import { QueryParams } from "@/lib/types.ts";
 import { getWorkspaceMembers } from "@/features/workspace/services/workspace-service.ts";
-import { getLicenseInfo } from "@/ee/licence/services/license-service.ts";
-import { getSsoProviders } from "@/ee/security/services/security-service.ts";
+import { getLicenseInfo } from "@/oss/licence/services/license-service.ts";
+import { getSsoProviders } from "@/oss/security/services/security-service.ts";
 import { getShares } from "@/features/share/services/share-service.ts";
-import { getApiKeys } from "@/ee/api-key";
-import { getAuditLogs } from "@/ee/audit/services/audit-service";
+import { getApiKeys } from "@/oss/api-key";
+import { getAuditLogs } from "@/oss/audit/services/audit-service";
 
 export const prefetchWorkspaceMembers = () => {
   const params: QueryParams = { limit: 100, query: "" };

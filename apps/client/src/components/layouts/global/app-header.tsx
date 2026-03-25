@@ -12,7 +12,7 @@ import {
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
 import SidebarToggle from "@/components/ui/sidebar-toggle-button.tsx";
 import { useTranslation } from "react-i18next";
-import useTrial from "@/ee/hooks/use-trial.tsx";
+import useTrial from "@/oss/hooks/use-trial.tsx";
 import { isCloud } from "@/lib/config.ts";
 import {
   SearchControl,

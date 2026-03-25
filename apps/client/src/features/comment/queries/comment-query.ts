@@ -153,4 +153,4 @@ export function useDeleteCommentMutation(pageId?: string) {
   });
 }
 
-// EE: useResolveCommentMutation has been moved to @/ee/comment/queries/comment-query
+// EE: useResolveCommentMutation has been moved to @/oss/comment/queries/comment-query

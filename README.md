@@ -55,12 +55,7 @@ docker compose --env-file .env.docker down
 
 ### License
 Docmost core is licensed under the open-source AGPL 3.0 license.  
-Enterprise features are available under an enterprise license (Enterprise Edition).  
-
-All files in the following directories are licensed under the Docmost Enterprise license defined in `packages/ee/License`.
-  - apps/server/src/ee
-  - apps/client/src/ee
-  - packages/ee
+This repository has been trimmed to the open-source codebase only.
 
 ### Contributing
 

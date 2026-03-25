@@ -35,7 +35,7 @@ export class AttachmentProcessor extends WorkerHost implements OnModuleDestroy {
         let AttachmentEeModule: any;
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          AttachmentEeModule = require('./../../../ee/attachments-ee/attachment-ee.service');
+          AttachmentEeModule = require('./../../../../oss/attachments-ee/attachment-ee.service');
         } catch (err) {
           this.logger.debug(
             'Attachment enterprise module requested but EE module not bundled in this build',

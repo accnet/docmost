@@ -8,11 +8,11 @@ import { notifications } from "@mantine/notifications";
 import { searchSpotlightStore } from "../constants.ts";
 import { SearchSpotlightFilters } from "./search-spotlight-filters.tsx";
 import { useUnifiedSearch } from "../hooks/use-unified-search.ts";
-import { useAiSearch } from "../../../ee/ai/hooks/use-ai-search.ts";
+import { useAiSearch } from "@/oss/ai/hooks/use-ai-search.ts";
 import { SearchResultItem } from "./search-result-item.tsx";
-import { AiSearchResult } from "../../../ee/ai/components/ai-search-result.tsx";
-import { useHasFeature } from "@/ee/hooks/use-feature";
-import { Feature } from "@/ee/features";
+import { AiSearchResult } from "@/oss/ai/components/ai-search-result.tsx";
+import { useHasFeature } from "@/oss/hooks/use-feature";
+import { Feature } from "@/oss/features";
 
 interface SearchSpotlightProps {
   spaceId?: string;
