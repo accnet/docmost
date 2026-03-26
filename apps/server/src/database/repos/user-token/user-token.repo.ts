@@ -36,6 +36,28 @@ export class UserTokenRepo {
       .executeTakeFirst();
   }
 
+  async findByTokenGlobal(
+    token: string,
+    trx?: KyselyTransaction,
+  ): Promise<UserToken> {
+    const db = dbOrTx(this.db, trx);
+
+    return db
+      .selectFrom('userTokens')
+      .select([
+        'id',
+        'token',
+        'userId',
+        'workspaceId',
+        'type',
+        'expiresAt',
+        'usedAt',
+        'createdAt',
+      ])
+      .where('token', '=', token)
+      .executeTakeFirst();
+  }
+
   async insertUserToken(
     insertableUserToken: InsertableUserToken,
     opts?: { trx?: KyselyTransaction },

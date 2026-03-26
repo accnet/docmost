@@ -100,6 +100,14 @@ export function getPostHogKey() {
   return getConfigValue("POSTHOG_KEY");
 }
 
+export function getGoogleClientId() {
+  return getConfigValue("GOOGLE_CLIENT_ID", "");
+}
+
+export function isGoogleOauthEnabled(): boolean {
+  return Boolean(getGoogleClientId());
+}
+
 function getConfigValue(key: string, defaultValue: string = undefined): string {
   const rawValue = import.meta.env.DEV
     ? process?.env?.[key]

@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "build": "nx run-many -t build",
+    "test:e2e:auth": "bash ./scripts/run-playwright-auth-e2e.sh tests/e2e/auth-redirect.spec.ts",
     "start": "pnpm --filter ./apps/server run start:prod",
     "collab": "pnpm --filter ./apps/server run collab:prod",
     "collab:dev": "pnpm --filter ./apps/server run collab:dev",
@@ -78,6 +79,7 @@
   },
   "devDependencies": {
     "@nx/js": "22.6.1",
+    "@playwright/test": "^1.58.2",
     "@types/bytes": "^3.1.5",
     "@types/qrcode": "^1.5.6",
     "@types/turndown": "^5.0.6",

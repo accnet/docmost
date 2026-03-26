@@ -23,6 +23,8 @@ export class UserRepo {
     'email',
     'name',
     'emailVerifiedAt',
+    'registrationSource',
+    'isSuperUser',
     'avatarUrl',
     'role',
     'workspaceId',
@@ -77,6 +79,60 @@ export class UserRepo {
       .executeTakeFirst();
   }
 
+  async findByEmailGlobal(
+    email: string,
+    opts?: {
+      includePassword?: boolean;
+      includeUserMfa?: boolean;
+      trx?: KyselyTransaction;
+    },
+  ): Promise<User> {
+    const db = dbOrTx(this.db, opts?.trx);
+    return db
+      .selectFrom('users')
+      .select(this.baseFields)
+      .$if(opts?.includePassword, (qb) => qb.select('password'))
+      .$if(opts?.includeUserMfa, (qb) => qb.select(this.withUserMfa))
+      .where(sql`LOWER(email)`, '=', sql`LOWER(${email})`)
+      .where('deletedAt', 'is', null)
+      .executeTakeFirst();
+  }
+
+  async findByIdGlobal(
+    userId: string,
+    opts?: {
+      includePassword?: boolean;
+      trx?: KyselyTransaction;
+    },
+  ): Promise<User> {
+    const db = dbOrTx(this.db, opts?.trx);
+    return db
+      .selectFrom('users')
+      .select(this.baseFields)
+      .$if(opts?.includePassword, (qb) => qb.select('password'))
+      .where('id', '=', userId)
+      .where('deletedAt', 'is', null)
+      .executeTakeFirst();
+  }
+
+  async findRegisteredByEmailGlobal(
+    email: string,
+    opts?: {
+      includePassword?: boolean;
+      trx?: KyselyTransaction;
+    },
+  ): Promise<User> {
+    const db = dbOrTx(this.db, opts?.trx);
+    return db
+      .selectFrom('users')
+      .select(this.baseFields)
+      .$if(opts?.includePassword, (qb) => qb.select('password'))
+      .where(sql`LOWER(email)`, '=', sql`LOWER(${email})`)
+      .where('deletedAt', 'is', null)
+      .where('registrationSource', 'in', ['bootstrap', 'register'])
+      .executeTakeFirst();
+  }
+
   async updateUser(
     updatableUser: UpdatableUser,
     userId: string,
@@ -90,6 +146,20 @@ export class UserRepo {
       .set({ ...updatableUser, updatedAt: new Date() })
       .where('id', '=', userId)
       .where('workspaceId', '=', workspaceId)
+      .execute();
+  }
+
+  async updateUserGlobal(
+    updatableUser: UpdatableUser,
+    userId: string,
+    trx?: KyselyTransaction,
+  ) {
+    const db = dbOrTx(this.db, trx);
+
+    return await db
+      .updateTable('users')
+      .set({ ...updatableUser, updatedAt: new Date() })
+      .where('id', '=', userId)
       .execute();
   }
 
@@ -124,6 +194,18 @@ export class UserRepo {
       .values({ ...insertableUser, ...user })
       .returning(this.baseFields)
       .executeTakeFirst();
+  }
+
+  async countSuperUsers(trx?: KyselyTransaction): Promise<number> {
+    const db = dbOrTx(this.db, trx);
+    const { count } = await db
+      .selectFrom('users')
+      .select((eb) => eb.fn.count('id').as('count'))
+      .where('isSuperUser', '=', true)
+      .where('deletedAt', 'is', null)
+      .executeTakeFirstOrThrow();
+
+    return Number(count);
   }
 
   async roleCountByWorkspaceId(
@@ -170,6 +252,44 @@ export class UserRepo {
         { expression: 'id', direction: 'asc' },
       ],
       parseCursor: (cursor) => ({ name: cursor.name, id: cursor.id }),
+    });
+  }
+
+  async getRegisteredUsersPaginated(pagination: PaginationOptions) {
+    let query = this.db
+      .selectFrom('users')
+      .leftJoin('workspaces', 'workspaces.id', 'users.workspaceId')
+      .select([
+        ...this.baseFields.map((field) => `users.${field}` as any),
+        'workspaces.name as workspaceName',
+        'workspaces.status as workspaceStatus',
+      ])
+      .where('users.registrationSource', 'in', ['bootstrap', 'register'])
+      .where('users.deletedAt', 'is', null);
+
+    if (pagination.query) {
+      query = query.where((eb) =>
+        eb(
+          sql`f_unaccent(users.name)`,
+          'ilike',
+          sql`f_unaccent(${'%' + pagination.query + '%'})`,
+        ).or(
+          sql`users.email`,
+          'ilike',
+          sql`f_unaccent(${'%' + pagination.query + '%'})`,
+        ),
+      );
+    }
+
+    return executeWithCursorPagination(query, {
+      perPage: pagination.limit,
+      cursor: pagination.cursor,
+      beforeCursor: pagination.beforeCursor,
+      fields: [
+        { expression: 'users.name', direction: 'asc' },
+        { expression: 'users.id', direction: 'asc' },
+      ],
+      parseCursor: (cursor: any) => ({ name: cursor.name, id: cursor.id }),
     });
   }
 

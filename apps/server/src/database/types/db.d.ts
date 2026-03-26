@@ -315,6 +315,7 @@ export interface Users {
   deletedAt: Timestamp | null;
   email: string;
   emailVerifiedAt: Timestamp | null;
+  isSuperUser: Generated<boolean>;
   id: Generated<string>;
   invitedById: string | null;
   lastActiveAt: Timestamp | null;
@@ -323,6 +324,7 @@ export interface Users {
   hasGeneratedPassword: Generated<boolean | null>;
   name: string | null;
   password: string | null;
+  registrationSource: Generated<string>;
   role: string | null;
   settings: Json | null;
   timezone: string | null;

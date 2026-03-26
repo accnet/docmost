@@ -1,4 +1,3 @@
-import { useWorkspacePublicDataQuery } from "@/features/workspace/queries/workspace-query.ts";
 import { SetupWorkspaceForm } from "@/features/auth/components/setup-workspace-form.tsx";
 import { Helmet } from "react-helmet-async";
 import React, { useEffect } from "react";
@@ -6,33 +5,29 @@ import { useNavigate } from "react-router-dom";
 import APP_ROUTE from "@/lib/app-route.ts";
 import { getAppName } from "@/lib/config.ts";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
+import { getSetupStatus } from "@/features/auth/services/auth-service";
 
 export default function SetupWorkspace() {
   const { t } = useTranslation();
-  const {
-    data: workspace,
-    isLoading,
-    isError,
-    error,
-  } = useWorkspacePublicDataQuery();
+  const { data, isLoading } = useQuery({
+    queryKey: ["auth", "setup-status"],
+    queryFn: getSetupStatus,
+  });
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isLoading && workspace) {
+    if (!isLoading && data?.isSetupComplete) {
       navigate(APP_ROUTE.AUTH.LOGIN);
     }
-  }, [isLoading, workspace]);
+  }, [data?.isSetupComplete, isLoading, navigate]);
 
   if (isLoading) {
     return <div></div>;
   }
 
-  if (
-    isError &&
-    error?.["response"]?.status === 404 &&
-    error?.["response"]?.data.message.includes("Workspace not found")
-  ) {
+  if (!data?.isSetupComplete) {
     return (
       <>
         <Helmet>

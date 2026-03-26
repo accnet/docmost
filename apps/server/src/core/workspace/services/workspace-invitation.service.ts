@@ -80,7 +80,30 @@ export class WorkspaceInvitationService {
     });
   }
 
-  async getInvitationById(invitationId: string, workspace: Workspace) {
+  async getInvitationById(invitationId: string) {
+    const invitation = await this.db
+      .selectFrom('workspaceInvitations')
+      .innerJoin('workspaces', 'workspaces.id', 'workspaceInvitations.workspaceId')
+      .select([
+        'workspaceInvitations.id as id',
+        'workspaceInvitations.email as email',
+        'workspaceInvitations.createdAt as createdAt',
+        'workspaces.enforceSso as enforceSso',
+      ])
+      .where('workspaceInvitations.id', '=', invitationId)
+      .executeTakeFirst();
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found');
+    }
+
+    return invitation;
+  }
+
+  async getInvitationByWorkspaceId(
+    invitationId: string,
+    workspace: Workspace,
+  ) {
     const invitation = await this.db
       .selectFrom('workspaceInvitations')
       .select(['id', 'email', 'createdAt'])
@@ -91,7 +114,6 @@ export class WorkspaceInvitationService {
     if (!invitation) {
       throw new NotFoundException('Invitation not found');
     }
-
     return { ...invitation, enforceSso: workspace.enforceSso };
   }
 
@@ -121,6 +143,26 @@ export class WorkspaceInvitationService {
 
     try {
       await executeTx(this.db, async (trx) => {
+        const existingRegisteredUsers =
+          await Promise.all(
+            emails.map(async (email) => ({
+              email,
+              user: await this.userRepo.findRegisteredByEmailGlobal(email, {
+                trx,
+              }),
+            })),
+          );
+
+        const blockedEmails = existingRegisteredUsers
+          .filter((entry) => entry.user)
+          .map((entry) => entry.email);
+
+        if (blockedEmails.length > 0) {
+          throw new BadRequestException(
+            `These emails already belong to registered users: ${blockedEmails.join(', ')}`,
+          );
+        }
+
         // we do not want to invite existing members
         const findExistingUsers = await this.db
           .selectFrom('users')
@@ -170,6 +212,10 @@ export class WorkspaceInvitationService {
           .execute();
       });
     } catch (err) {
+      if (err instanceof BadRequestException) {
+        throw err;
+      }
+
       this.logger.error(`createInvitation - ${err}`);
       throw new BadRequestException(
         'An error occurred while processing the invitations.',
@@ -208,10 +254,7 @@ export class WorkspaceInvitationService {
     }
   }
 
-  async acceptInvitation(
-    dto: AcceptInviteDto,
-    workspace: Workspace,
-  ): Promise<{
+  async acceptInvitation(dto: AcceptInviteDto): Promise<{
     authToken?: string;
     requiresLogin?: boolean;
     message?: string;
@@ -220,11 +263,20 @@ export class WorkspaceInvitationService {
       .selectFrom('workspaceInvitations')
       .selectAll()
       .where('id', '=', dto.invitationId)
-      .where('workspaceId', '=', workspace.id)
       .executeTakeFirst();
 
     if (!invitation) {
       throw new BadRequestException('Invitation not found');
+    }
+
+    const workspace = await this.db
+      .selectFrom('workspaces')
+      .selectAll()
+      .where('id', '=', invitation.workspaceId)
+      .executeTakeFirst();
+
+    if (!workspace) {
+      throw new BadRequestException('Workspace not found');
     }
 
     if (dto.token !== invitation.token) {
@@ -233,6 +285,16 @@ export class WorkspaceInvitationService {
 
     validateSsoEnforcement(workspace);
     validateAllowedEmail(invitation.email, workspace);
+
+    const existingRegisteredUser = await this.userRepo.findRegisteredByEmailGlobal(
+      invitation.email,
+    );
+
+    if (existingRegisteredUser) {
+      throw new BadRequestException(
+        'This email already belongs to a registered user.',
+      );
+    }
 
     let newUser: User;
 
@@ -246,6 +308,7 @@ export class WorkspaceInvitationService {
             password: dto.password,
             role: invitation.role,
             invitedById: invitation.invitedById,
+            registrationSource: 'invite',
             workspaceId: workspace.id,
           },
           trx,

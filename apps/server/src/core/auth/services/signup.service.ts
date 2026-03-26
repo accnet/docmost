@@ -3,6 +3,7 @@ import { CreateUserDto } from '../dto/create-user.dto';
 import { WorkspaceService } from '../../workspace/services/workspace.service';
 import { CreateWorkspaceDto } from '../../workspace/dto/create-workspace.dto';
 import { CreateAdminUserDto } from '../dto/create-admin-user.dto';
+import { RegisterUserDto } from '../dto/register-user.dto';
 import { UserRepo } from '@docmost/db/repos/user/user.repo';
 import { KyselyDB, KyselyTransaction } from '@docmost/db/types/kysely.types';
 import { executeTx } from '@docmost/db/utils';
@@ -96,6 +97,13 @@ export class SignupService {
     createAdminUserDto: CreateAdminUserDto,
     trx?: KyselyTransaction,
   ) {
+    return this.bootstrapSuperUser(createAdminUserDto, trx);
+  }
+
+  async bootstrapSuperUser(
+    createAdminUserDto: CreateAdminUserDto,
+    trx?: KyselyTransaction,
+  ) {
     let user: User,
       workspace: Workspace = null;
 
@@ -110,6 +118,8 @@ export class SignupService {
             password: createAdminUserDto.password,
             role: UserRole.OWNER,
             emailVerifiedAt: new Date(),
+            registrationSource: 'bootstrap',
+            isSuperUser: true,
           },
           trx,
         );
@@ -131,6 +141,92 @@ export class SignupService {
       },
       trx,
     );
+
+    this.auditService.log({
+      event: AuditEvent.USER_CREATED,
+      resourceType: AuditResource.USER,
+      resourceId: user.id,
+      changes: {
+        after: {
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isSuperUser: user.isSuperUser,
+          registrationSource: user.registrationSource,
+        },
+      },
+      metadata: {
+        source: 'bootstrap',
+      },
+    });
+
+    return { user, workspace };
+  }
+
+  async registerOwnerWithWorkspace(
+    registerUserDto: RegisterUserDto,
+    trx?: KyselyTransaction,
+  ) {
+    const existingUser = await this.userRepo.findRegisteredByEmailGlobal(
+      registerUserDto.email,
+      { trx },
+    );
+
+    if (existingUser) {
+      throw new BadRequestException(
+        'An account with this email already exists.',
+      );
+    }
+
+    let user: User,
+      workspace: Workspace = null;
+
+    await executeTx(
+      this.db,
+      async (trx) => {
+        user = await this.userRepo.insertUser(
+          {
+            name: registerUserDto.name,
+            email: registerUserDto.email,
+            password: registerUserDto.password,
+            role: UserRole.OWNER,
+            registrationSource: 'register',
+            emailVerifiedAt: new Date(),
+          },
+          trx,
+        );
+
+        workspace = await this.workspaceService.create(
+          user,
+          {
+            name: registerUserDto.workspaceName || `${registerUserDto.name}'s workspace`,
+            hostname: registerUserDto.hostname,
+          },
+          trx,
+        );
+
+        user.workspaceId = workspace.id;
+        return user;
+      },
+      trx,
+    );
+
+    this.auditService.log({
+      event: AuditEvent.USER_CREATED,
+      resourceType: AuditResource.USER,
+      resourceId: user.id,
+      changes: {
+        after: {
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          registrationSource: user.registrationSource,
+        },
+      },
+      metadata: {
+        source: 'register',
+      },
+    });
 
     return { user, workspace };
   }

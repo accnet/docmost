@@ -4,7 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { comparePasswordHash, diffAuditTrackedFields } from 'src/common/helpers/utils';
@@ -15,11 +15,18 @@ import {
   AUDIT_SERVICE,
   IAuditService,
 } from '../../integrations/audit/audit.service';
+import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
+import { InjectKysely } from 'nestjs-kysely';
+import { KyselyDB } from '@docmost/db/types/kysely.types';
+import { executeTx } from '@docmost/db/utils';
+import { WorkspaceStatus } from '../workspace/workspace.constants';
+import { User } from '@docmost/db/types/entity.types';
 
 @Injectable()
 export class UserService {
   constructor(
     private userRepo: UserRepo,
+    @InjectKysely() private readonly db: KyselyDB,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -120,5 +127,120 @@ export class UserService {
     }
 
     return user;
+  }
+
+  ensureSuperUser(actor: User) {
+    if (!actor?.isSuperUser) {
+      throw new ForbiddenException();
+    }
+  }
+
+  async getRegisteredUsers(pagination: PaginationOptions) {
+    return this.userRepo.getRegisteredUsersPaginated(pagination);
+  }
+
+  async deactivateRegisteredUser(actor: User, userId: string): Promise<void> {
+    this.ensureSuperUser(actor);
+    const user = await this.userRepo.findByIdGlobal(userId);
+
+    if (!user || !['bootstrap', 'register'].includes(user.registrationSource)) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.isSuperUser) {
+      const superUserCount = await this.userRepo.countSuperUsers();
+      if (superUserCount <= 1) {
+        throw new BadRequestException('Cannot deactivate the last Super User');
+      }
+    }
+
+    await executeTx(this.db, async (trx) => {
+      await this.userRepo.updateUserGlobal(
+        {
+          deactivatedAt: new Date(),
+        },
+        user.id,
+        trx,
+      );
+
+      if (user.workspaceId) {
+        await trx
+          .updateTable('workspaces')
+          .set({
+            status: WorkspaceStatus.Suspended,
+            updatedAt: new Date(),
+          })
+          .where('id', '=', user.workspaceId)
+          .execute();
+      }
+    });
+  }
+
+  async activateRegisteredUser(actor: User, userId: string): Promise<void> {
+    this.ensureSuperUser(actor);
+    const user = await this.userRepo.findByIdGlobal(userId);
+
+    if (!user || !['bootstrap', 'register'].includes(user.registrationSource)) {
+      throw new NotFoundException('User not found');
+    }
+
+    await executeTx(this.db, async (trx) => {
+      await this.userRepo.updateUserGlobal(
+        {
+          deactivatedAt: null,
+        },
+        user.id,
+        trx,
+      );
+
+      if (user.workspaceId) {
+        await trx
+          .updateTable('workspaces')
+          .set({
+            status: WorkspaceStatus.Active,
+            updatedAt: new Date(),
+          })
+          .where('id', '=', user.workspaceId)
+          .execute();
+      }
+    });
+  }
+
+  async deleteRegisteredUser(actor: User, userId: string): Promise<void> {
+    this.ensureSuperUser(actor);
+    const user = await this.userRepo.findByIdGlobal(userId);
+
+    if (!user || !['bootstrap', 'register'].includes(user.registrationSource)) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.isSuperUser) {
+      const superUserCount = await this.userRepo.countSuperUsers();
+      if (superUserCount <= 1) {
+        throw new BadRequestException('Cannot delete the last Super User');
+      }
+    }
+
+    await executeTx(this.db, async (trx) => {
+      await this.userRepo.updateUserGlobal(
+        {
+          deletedAt: new Date(),
+          deactivatedAt: new Date(),
+        },
+        user.id,
+        trx,
+      );
+
+      if (user.workspaceId) {
+        await trx
+          .updateTable('workspaces')
+          .set({
+            status: WorkspaceStatus.Suspended,
+            updatedAt: new Date(),
+          })
+          .where('id', '=', user.workspaceId)
+          .execute();
+      }
+    });
   }
 }

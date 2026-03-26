@@ -4,9 +4,11 @@ export interface ILogin {
 }
 
 export interface IRegister {
-  name?: string;
+  workspaceName?: string;
+  name: string;
   email: string;
   password: string;
+  hostname?: string;
 }
 
 export interface ISetupWorkspace {

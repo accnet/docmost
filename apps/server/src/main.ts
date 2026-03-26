@@ -58,29 +58,25 @@ async function bootstrap() {
       this.send('');
     })
     .addHook('preHandler', function (req, reply, done) {
-      // don't require workspaceId for the following paths
-      const excludedPaths = [
-        '/api/auth/setup',
-        '/api/health',
-        '/api/billing/stripe/webhook',
-        '/api/workspace/check-hostname',
-        '/api/sso/google',
-        '/api/workspace/create',
-        '/api/workspace/joined',
-        '/api/workspace/find-by-email',
+      const publicWorkspacePaths = [
+        '/auth/forgot-password',
+        '/auth/password-reset',
+        '/auth/verify-token',
+        '/workspace/public',
       ];
+      const normalizedPath = req.originalUrl
+        .split('?')[0]
+        .replace(/^\/api/, '');
 
       if (
         req.originalUrl.startsWith('/api') &&
-        !excludedPaths.some((path) => req.originalUrl.startsWith(path))
+        publicWorkspacePaths.some((path) => normalizedPath.startsWith(path)) &&
+        !req.raw?.['workspaceId']
       ) {
-        if (!req.raw?.['workspaceId'] && req.originalUrl !== '/api') {
-          throw new NotFoundException('Workspace not found');
-        }
-        done();
-      } else {
-        done();
+        throw new NotFoundException('Workspace not found');
       }
+
+      done();
     });
 
   app.useGlobalPipes(

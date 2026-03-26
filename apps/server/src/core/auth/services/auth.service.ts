@@ -38,6 +38,9 @@ import {
   IAuditService,
 } from '../../../integrations/audit/audit.service';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
+import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
+import { RegisterUserDto } from '../dto/register-user.dto';
+import { validateSsoEnforcement } from '../auth.util';
 
 @Injectable()
 export class AuthService {
@@ -45,6 +48,7 @@ export class AuthService {
     private signupService: SignupService,
     private tokenService: TokenService,
     private userRepo: UserRepo,
+    private workspaceRepo: WorkspaceRepo,
     private userTokenRepo: UserTokenRepo,
     private mailService: MailService,
     private domainService: DomainService,
@@ -53,19 +57,30 @@ export class AuthService {
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
-  async login(loginDto: LoginDto, workspaceId: string) {
-    const user = await this.userRepo.findByEmail(loginDto.email, workspaceId, {
-      includePassword: true,
-    });
+  async login(loginDto: LoginDto, workspaceId?: string) {
+    const resolvedUser = this.environmentService.isSelfHosted()
+      ? await this.userRepo.findByEmailGlobal(loginDto.email, {
+          includePassword: true,
+        })
+      : await this.userRepo.findByEmail(loginDto.email, workspaceId, {
+          includePassword: true,
+        });
+
+    const resolvedWorkspaceId = resolvedUser?.workspaceId ?? workspaceId;
+    const workspace = resolvedWorkspaceId
+      ? await this.workspaceRepo.findById(resolvedWorkspaceId)
+      : null;
 
     const errorMessage = 'Email or password does not match';
-    if (!user || isUserDisabled(user)) {
+    if (!resolvedUser || !workspace || isUserDisabled(resolvedUser)) {
       throw new UnauthorizedException(errorMessage);
     }
 
+    validateSsoEnforcement(workspace);
+
     const isPasswordMatch = await comparePasswordHash(
       loginDto.password,
-      user.password,
+      resolvedUser.password,
     );
 
     if (!isPasswordMatch) {
@@ -74,23 +89,23 @@ export class AuthService {
 
     throwIfEmailNotVerified({
       isCloud: this.environmentService.isCloud(),
-      emailVerifiedAt: user.emailVerifiedAt,
-      email: user.email,
-      workspaceId,
+      emailVerifiedAt: resolvedUser.emailVerifiedAt,
+      email: resolvedUser.email,
+      workspaceId: workspace.id,
       appSecret: this.environmentService.getAppSecret(),
     });
 
-    user.lastLoginAt = new Date();
-    await this.userRepo.updateLastLogin(user.id, workspaceId);
+    resolvedUser.lastLoginAt = new Date();
+    await this.userRepo.updateLastLogin(resolvedUser.id, workspace.id);
 
     this.auditService.log({
       event: AuditEvent.USER_LOGIN,
       resourceType: AuditResource.USER,
-      resourceId: user.id,
+      resourceId: resolvedUser.id,
       metadata: { source: 'password' },
     });
 
-    return this.tokenService.generateAccessToken(user);
+    return this.tokenService.generateAccessToken(resolvedUser);
   }
 
   async register(createUserDto: CreateUserDto, workspaceId: string) {
@@ -104,6 +119,19 @@ export class AuthService {
 
     const authToken = await this.tokenService.generateAccessToken(user);
     return { workspace, authToken };
+  }
+
+  async registerOwner(registerUserDto: RegisterUserDto) {
+    const { workspace, user } =
+      await this.signupService.registerOwnerWithWorkspace(registerUserDto);
+
+    const authToken = await this.tokenService.generateAccessToken(user);
+    return { workspace, authToken };
+  }
+
+  async getSetupStatus() {
+    const isSetupComplete = (await this.userRepo.countSuperUsers()) > 0;
+    return { isSetupComplete };
   }
 
   async changePassword(
@@ -156,12 +184,16 @@ export class AuthService {
     forgotPasswordDto: ForgotPasswordDto,
     workspace: Workspace,
   ): Promise<void> {
-    const user = await this.userRepo.findByEmail(
-      forgotPasswordDto.email,
-      workspace.id,
-    );
+    const user = this.environmentService.isSelfHosted()
+      ? await this.userRepo.findByEmailGlobal(forgotPasswordDto.email)
+      : await this.userRepo.findByEmail(forgotPasswordDto.email, workspace.id);
 
     if (!user || isUserDisabled(user)) {
+      return;
+    }
+
+    const resolvedWorkspace = await this.workspaceRepo.findById(user.workspaceId);
+    if (!resolvedWorkspace) {
       return;
     }
 
@@ -186,7 +218,7 @@ export class AuthService {
       );
     });
 
-    const resetLink = `${this.domainService.getUrl(workspace.hostname)}/password-reset?token=${token}`;
+    const resetLink = `${this.domainService.getUrl(resolvedWorkspace.hostname)}/password-reset?token=${token}`;
 
     const emailTemplate = ForgotPasswordEmail({
       username: user.name,
@@ -204,10 +236,9 @@ export class AuthService {
     passwordResetDto: PasswordResetDto,
     workspace: Workspace,
   ) {
-    const userToken = await this.userTokenRepo.findById(
-      passwordResetDto.token,
-      workspace.id,
-    );
+    const userToken = this.environmentService.isSelfHosted()
+      ? await this.userTokenRepo.findByTokenGlobal(passwordResetDto.token)
+      : await this.userTokenRepo.findById(passwordResetDto.token, workspace.id);
 
     if (
       !userToken ||
@@ -217,9 +248,21 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired token');
     }
 
-    const user = await this.userRepo.findById(userToken.userId, workspace.id, {
+    const resolvedWorkspace = await this.workspaceRepo.findById(
+      userToken.workspaceId,
+    );
+
+    if (!resolvedWorkspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    const user = await this.userRepo.findById(
+      userToken.userId,
+      resolvedWorkspace.id,
+      {
       includeUserMfa: true,
-    });
+      },
+    );
     if (!user || isUserDisabled(user)) {
       throw new NotFoundException('User not found');
     }
@@ -233,7 +276,7 @@ export class AuthService {
           hasGeneratedPassword: false,
         },
         user.id,
-        workspace.id,
+        resolvedWorkspace.id,
         trx,
       );
 
@@ -262,13 +305,13 @@ export class AuthService {
       await this.userRepo.updateUser(
         { emailVerifiedAt: new Date() },
         user.id,
-        workspace.id,
+        resolvedWorkspace.id,
       );
     }
 
     // Check if user has MFA enabled or workspace enforces MFA
     const userHasMfa = user?.['mfa']?.isEnabled || false;
-    const workspaceEnforcesMfa = workspace.enforceMfa || false;
+    const workspaceEnforcesMfa = resolvedWorkspace.enforceMfa || false;
 
     if (userHasMfa || workspaceEnforcesMfa) {
       return {
@@ -284,10 +327,9 @@ export class AuthService {
     userTokenDto: VerifyUserTokenDto,
     workspaceId: string,
   ): Promise<void> {
-    const userToken: UserToken = await this.userTokenRepo.findById(
-      userTokenDto.token,
-      workspaceId,
-    );
+    const userToken: UserToken = this.environmentService.isSelfHosted()
+      ? await this.userTokenRepo.findByTokenGlobal(userTokenDto.token)
+      : await this.userTokenRepo.findById(userTokenDto.token, workspaceId);
 
     if (
       !userToken ||

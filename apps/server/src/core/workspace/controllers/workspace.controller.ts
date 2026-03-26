@@ -220,12 +220,8 @@ export class WorkspaceController {
   @Post('invites/info')
   async getInvitationById(
     @Body() dto: InvitationIdDto,
-    @AuthWorkspace() workspace: Workspace,
   ) {
-    return this.workspaceInvitationService.getInvitationById(
-      dto.invitationId,
-      workspace,
-    );
+    return this.workspaceInvitationService.getInvitationById(dto.invitationId);
   }
 
   @HttpCode(HttpStatus.OK)
@@ -294,13 +290,10 @@ export class WorkspaceController {
   @Post('invites/accept')
   async acceptInvite(
     @Body() acceptInviteDto: AcceptInviteDto,
-    @AuthWorkspace() workspace: Workspace,
     @Res({ passthrough: true }) res: FastifyReply,
   ) {
-    const result = await this.workspaceInvitationService.acceptInvitation(
-      acceptInviteDto,
-      workspace,
-    );
+    const result =
+      await this.workspaceInvitationService.acceptInvitation(acceptInviteDto);
 
     if (result.requiresLogin) {
       return {

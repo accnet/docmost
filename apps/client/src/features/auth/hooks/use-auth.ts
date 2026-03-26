@@ -4,6 +4,7 @@ import {
   login,
   logout,
   passwordReset,
+  register,
   setupWorkspace,
   verifyUserToken,
 } from "@/features/auth/services/auth-service";
@@ -14,6 +15,7 @@ import {
   IForgotPassword,
   ILogin,
   IPasswordReset,
+  IRegister,
   ISetupWorkspace,
   IVerifyUserToken,
 } from "@/features/auth/types/auth.types";
@@ -134,6 +136,22 @@ export default function useAuth() {
     }
   };
 
+  const handleSignUp = async (data: IRegister) => {
+    setIsLoading(true);
+
+    try {
+      await register(data);
+      setIsLoading(false);
+      navigate(APP_ROUTE.HOME);
+    } catch (err) {
+      setIsLoading(false);
+      notifications.show({
+        message: err.response?.data.message,
+        color: "red",
+      });
+    }
+  };
+
   const handlePasswordReset = async (data: IPasswordReset) => {
     setIsLoading(true);
 
@@ -207,6 +225,7 @@ export default function useAuth() {
 
   return {
     signIn: handleSignIn,
+    signUp: handleSignUp,
     invitationSignup: handleInvitationSignUp,
     setupWorkspace: handleSetupWorkspace,
     forgotPassword: handleForgotPassword,

@@ -1,11 +1,11 @@
 import { CanActivate, ForbiddenException, Injectable } from '@nestjs/common';
-import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { EnvironmentService } from '../../../integrations/environment/environment.service';
+import { UserRepo } from '@docmost/db/repos/user/user.repo';
 
 @Injectable()
 export class SetupGuard implements CanActivate {
   constructor(
-    private workspaceRepo: WorkspaceRepo,
+    private userRepo: UserRepo,
     private environmentService: EnvironmentService,
   ) {}
 
@@ -14,9 +14,9 @@ export class SetupGuard implements CanActivate {
       return false;
     }
 
-    const workspaceCount = await this.workspaceRepo.count();
-    if (workspaceCount > 0) {
-      throw new ForbiddenException('Workspace setup already completed.');
+    const superUserCount = await this.userRepo.countSuperUsers();
+    if (superUserCount > 0) {
+      throw new ForbiddenException('Super User setup already completed.');
     }
     return true;
   }

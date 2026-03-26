@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import SetupWorkspace from "@/pages/auth/setup-workspace.tsx";
+import SignupPage from "@/pages/auth/signup.tsx";
 import LoginPage from "@/pages/auth/login";
 import Home from "@/pages/dashboard/home";
 import Page from "@/pages/page/page";
@@ -21,9 +22,6 @@ import Billing from "@/oss/billing/pages/billing.tsx";
 import CloudLogin from "@/oss/pages/cloud-login.tsx";
 import CreateWorkspace from "@/oss/pages/create-workspace.tsx";
 import { isCloud } from "@/lib/config.ts";
-import { useTranslation } from "react-i18next";
-import Security from "@/oss/security/pages/security.tsx";
-import License from "@/oss/licence/pages/license.tsx";
 import { useRedirectToCloudSelect } from "@/oss/hooks/use-redirect-to-cloud-select.tsx";
 import SharedPage from "@/pages/share/shared-page.tsx";
 import Shares from "@/pages/settings/shares/shares.tsx";
@@ -34,14 +32,10 @@ import SpacesPage from "@/pages/spaces/spaces.tsx";
 import { MfaChallengePage } from "@/oss/mfa/pages/mfa-challenge-page";
 import { MfaSetupRequiredPage } from "@/oss/mfa/pages/mfa-setup-required-page";
 import SpaceTrash from "@/pages/space/space-trash.tsx";
-import UserApiKeys from "@/oss/api-key/pages/user-api-keys";
-import WorkspaceApiKeys from "@/oss/api-key/pages/workspace-api-keys";
-import AiSettings from "@/oss/ai/pages/ai-settings.tsx";
-import AuditLogs from "@/oss/audit/pages/audit-logs.tsx";
 import VerifyEmail from "@/oss/pages/verify-email.tsx";
+import SystemUsersPage from "@/pages/settings/system/system-users";
 
 export default function App() {
-  const { t } = useTranslation();
   useRedirectToCloudSelect();
   useTrackOrigin();
 
@@ -57,7 +51,10 @@ export default function App() {
         <Route path={"/login/mfa/setup"} element={<MfaSetupRequiredPage />} />
 
         {!isCloud() && (
-          <Route path={"/setup/register"} element={<SetupWorkspace />} />
+          <>
+            <Route path={"/setup/register"} element={<SetupWorkspace />} />
+            <Route path={"/signup"} element={<SignupPage />} />
+          </>
         )}
 
         {isCloud() && (
@@ -95,19 +92,13 @@ export default function App() {
               path={"account/preferences"}
               element={<AccountPreferences />}
             />
-            <Route path={"account/api-keys"} element={<UserApiKeys />} />
             <Route path={"workspace"} element={<WorkspaceSettings />} />
             <Route path={"members"} element={<WorkspaceMembers />} />
-            <Route path={"api-keys"} element={<WorkspaceApiKeys />} />
             <Route path={"groups"} element={<Groups />} />
             <Route path={"groups/:groupId"} element={<GroupInfo />} />
             <Route path={"spaces"} element={<Spaces />} />
             <Route path={"sharing"} element={<Shares />} />
-            <Route path={"security"} element={<Security />} />
-            <Route path={"ai"} element={<AiSettings />} />
-            <Route path={"ai/mcp"} element={<AiSettings />} />
-            <Route path={"audit"} element={<AuditLogs />} />
-            {!isCloud() && <Route path={"license"} element={<License />} />}
+            <Route path={"system/users"} element={<SystemUsersPage />} />
             {isCloud() && <Route path={"billing"} element={<Billing />} />}
           </Route>
         </Route>

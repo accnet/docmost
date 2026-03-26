@@ -7,11 +7,8 @@ import { getSpaces } from "@/features/space/services/space-service.ts";
 import { getGroups } from "@/features/group/services/group-service.ts";
 import { QueryParams } from "@/lib/types.ts";
 import { getWorkspaceMembers } from "@/features/workspace/services/workspace-service.ts";
-import { getLicenseInfo } from "@/oss/licence/services/license-service.ts";
-import { getSsoProviders } from "@/oss/security/services/security-service.ts";
 import { getShares } from "@/features/share/services/share-service.ts";
-import { getApiKeys } from "@/oss/api-key";
-import { getAuditLogs } from "@/oss/audit/services/audit-service";
+import { getSystemUsers } from "@/features/user/services/user-service";
 
 export const prefetchWorkspaceMembers = () => {
   const params: QueryParams = { limit: 100, query: "" };
@@ -47,20 +44,6 @@ export const prefetchBilling = () => {
   });
 };
 
-export const prefetchLicense = () => {
-  queryClient.prefetchQuery({
-    queryKey: ["license"],
-    queryFn: () => getLicenseInfo(),
-  });
-};
-
-export const prefetchSsoProviders = () => {
-  queryClient.prefetchQuery({
-    queryKey: ["sso-providers"],
-    queryFn: () => getSsoProviders(),
-  });
-};
-
 export const prefetchShares = () => {
   queryClient.prefetchQuery({
     queryKey: ["share-list", {}],
@@ -68,24 +51,10 @@ export const prefetchShares = () => {
   });
 };
 
-export const prefetchApiKeys = () => {
+export const prefetchSystemUsers = () => {
+  const params = { limit: 100, query: "" };
   queryClient.prefetchQuery({
-    queryKey: ["api-key-list", {}],
-    queryFn: () => getApiKeys({}),
-  });
-};
-
-export const prefetchApiKeyManagement = () => {
-  queryClient.prefetchQuery({
-    queryKey: ["api-key-list", { adminView: true }],
-    queryFn: () => getApiKeys({ adminView: true }),
-  });
-};
-
-export const prefetchAuditLogs = () => {
-  const params = { limit: 50 };
-  queryClient.prefetchQuery({
-    queryKey: ["audit-logs", params],
-    queryFn: () => getAuditLogs(params),
+    queryKey: ["systemUsers", params],
+    queryFn: () => getSystemUsers(params),
   });
 };

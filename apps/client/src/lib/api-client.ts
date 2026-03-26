@@ -45,7 +45,8 @@ api.interceptors.response.use(
             console.log("workspace not found");
             if (
               !isCloud() &&
-              window.location.pathname != APP_ROUTE.AUTH.SETUP
+              window.location.pathname != APP_ROUTE.AUTH.SETUP &&
+              !isAuthPath(window.location.pathname)
             ) {
               window.location.href = APP_ROUTE.AUTH.SETUP;
             }
@@ -81,6 +82,20 @@ function redirectToLogin() {
       window.location.href = `${APP_ROUTE.AUTH.LOGIN}?${params.toString()}`;
     }
   }
+}
+
+function isAuthPath(pathname: string) {
+  const authPaths = [
+    APP_ROUTE.AUTH.LOGIN,
+    APP_ROUTE.AUTH.SIGNUP,
+    APP_ROUTE.AUTH.SETUP,
+    APP_ROUTE.AUTH.FORGOT_PASSWORD,
+    APP_ROUTE.AUTH.PASSWORD_RESET,
+    APP_ROUTE.AUTH.MFA_CHALLENGE,
+    APP_ROUTE.AUTH.MFA_SETUP_REQUIRED,
+  ];
+
+  return authPaths.some((path) => pathname.startsWith(path));
 }
 
 export default api;

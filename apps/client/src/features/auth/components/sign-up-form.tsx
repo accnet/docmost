@@ -3,38 +3,37 @@ import { z } from "zod/v4";
 import { useForm } from "@mantine/form";
 import { zod4Resolver } from "mantine-form-zod-resolver";
 import {
-  Container,
-  Title,
-  TextInput,
-  Button,
-  PasswordInput,
-  Box,
   Anchor,
+  Box,
+  Button,
+  Container,
+  PasswordInput,
   Text,
+  TextInput,
+  Title,
 } from "@mantine/core";
+import { Link } from "react-router-dom";
 import useAuth from "@/features/auth/hooks/use-auth";
+import APP_ROUTE from "@/lib/app-route.ts";
 import classes from "@/features/auth/components/auth.module.css";
 import { useTranslation } from "react-i18next";
-import SsoCloudSignup from "@/oss/components/sso-cloud-signup.tsx";
-import { isCloud } from "@/lib/config.ts";
-import { Link } from "react-router-dom";
-import APP_ROUTE from "@/lib/app-route.ts";
 import { AuthLayout } from "./auth-layout.tsx";
+import SsoCloudSignup from "@/oss/components/sso-cloud-signup.tsx";
 
 const formSchema = z.object({
-  workspaceName: z.string().trim().max(50).optional(),
+  workspaceName: z.string().trim().min(1, { message: "Workspace name is required" }).max(50),
   name: z.string().min(1, { message: "Name is required" }).max(50),
   email: z
     .email({ message: "Invalid email address" })
     .min(1, { message: "Email is required" }),
   password: z.string().min(8, { message: "Password must be at least 8 characters" }),
 });
+
 type FormValues = z.infer<typeof formSchema>;
 
-export function SetupWorkspaceForm() {
+export function SignUpForm() {
   const { t } = useTranslation();
-  const { setupWorkspace, isLoading } = useAuth();
-  // useRedirectIfAuthenticated();
+  const { signUp, isLoading } = useAuth();
 
   const form = useForm<FormValues>({
     validate: zod4Resolver(formSchema),
@@ -47,7 +46,7 @@ export function SetupWorkspaceForm() {
   });
 
   async function onSubmit(data: FormValues) {
-    await setupWorkspace(data);
+    await signUp(data);
   }
 
   return (
@@ -55,23 +54,21 @@ export function SetupWorkspaceForm() {
       <Container size={420} className={classes.container}>
         <Box p="xl" className={classes.containerBox}>
           <Title order={2} ta="center" fw={500} mb="md">
-            {t("Create workspace")}
+            {t("Create your workspace")}
           </Title>
 
           <SsoCloudSignup />
 
           <form onSubmit={form.onSubmit(onSubmit)}>
-            {!isCloud() && (
-              <TextInput
-                id="workspaceName"
-                type="text"
-                label={t("Workspace Name")}
-                placeholder={t("e.g ACME Inc")}
-                variant="filled"
-                mt="md"
-                {...form.getInputProps("workspaceName")}
-              />
-            )}
+            <TextInput
+              id="workspaceName"
+              type="text"
+              label={t("Workspace Name")}
+              placeholder={t("e.g ACME Inc")}
+              variant="filled"
+              mt="md"
+              {...form.getInputProps("workspaceName")}
+            />
 
             <TextInput
               id="name"
@@ -100,24 +97,19 @@ export function SetupWorkspaceForm() {
               mt="md"
               {...form.getInputProps("password")}
             />
+
             <Button type="submit" fullWidth mt="xl" loading={isLoading}>
-              {t("Create workspace")}
+              {t("Sign Up")}
             </Button>
           </form>
         </Box>
       </Container>
-      {isCloud() && (
-        <Text ta="center">
-          {t("Already part of an existing workspace?")}{" "}
-          <Anchor
-            component={Link}
-            to={APP_ROUTE.AUTH.SELECT_WORKSPACE}
-            fw={500}
-          >
-            {t("Sign-in")}
-          </Anchor>
-        </Text>
-      )}
+      <Text ta="center">
+        {t("Already have an account?")}{" "}
+        <Anchor component={Link} to={APP_ROUTE.AUTH.LOGIN} fw={500}>
+          {t("Sign in")}
+        </Anchor>
+      </Text>
     </AuthLayout>
   );
 }

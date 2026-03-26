@@ -57,6 +57,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException();
     }
 
+    req.raw.workspaceId = workspace.id;
+    req.raw.workspace = workspace;
+
     return { user, workspace };
   }
 

@@ -154,6 +154,18 @@ export class EnvironmentVariables {
   @IsString()
   EVENT_STORE_DRIVER: string;
 
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_ID: string;
+
+  @IsOptional()
+  @IsString()
+  GOOGLE_CLIENT_SECRET: string;
+
+  @IsOptional()
+  @IsUrl({ protocols: ['http', 'https'], require_tld: false })
+  GOOGLE_CALLBACK_URL: string;
+
   @ValidateIf((obj) => obj.EVENT_STORE_DRIVER === 'clickhouse')
   @IsNotEmpty()
   @IsUrl(

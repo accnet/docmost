@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Inject,
   Post,
+  Req,
   Res,
   UseGuards,
   Logger,
@@ -14,6 +16,7 @@ import { AuthService } from './services/auth.service';
 import { SetupGuard } from './guards/setup.guard';
 import { EnvironmentService } from '../../integrations/environment/environment.service';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
+import { RegisterUserDto } from './dto/register-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { User, Workspace } from '@docmost/db/types/entity.types';
@@ -43,14 +46,19 @@ export class AuthController {
   ) {}
 
   @HttpCode(HttpStatus.OK)
+  @Get('setup-status')
+  async getSetupStatus() {
+    return this.authService.getSetupStatus();
+  }
+
+  @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(
-    @AuthWorkspace() workspace: Workspace,
+    @Req() req: any,
     @Res({ passthrough: true }) res: FastifyReply,
     @Body() loginInput: LoginDto,
   ) {
-    validateSsoEnforcement(workspace);
-
+    const workspace = req.raw?.workspace ?? null;
     let MfaModule: any;
     let isMfaModuleReady = false;
     try {
@@ -68,11 +76,9 @@ export class AuthController {
         strict: false,
       });
 
-      const mfaResult = await mfaService.checkMfaRequirements(
-        loginInput,
-        workspace,
-        res,
-      );
+      const mfaResult = workspace
+        ? await mfaService.checkMfaRequirements(loginInput, workspace, res)
+        : null;
 
       if (mfaResult) {
         // If user has MFA enabled OR workspace enforces MFA, require MFA verification
@@ -90,8 +96,21 @@ export class AuthController {
       }
     }
 
-    const authToken = await this.authService.login(loginInput, workspace.id);
+    const authToken = await this.authService.login(loginInput, workspace?.id);
     this.setAuthCookie(res, authToken);
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Post('register')
+  async register(
+    @Res({ passthrough: true }) res: FastifyReply,
+    @Body() registerUserDto: RegisterUserDto,
+  ) {
+    const { workspace, authToken } =
+      await this.authService.registerOwner(registerUserDto);
+
+    this.setAuthCookie(res, authToken);
+    return workspace;
   }
 
   @UseGuards(SetupGuard)

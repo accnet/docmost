@@ -1,31 +1,263 @@
-# Registration And Invite Checklist
+# Multi-Workspace User Model Plan
 
-## Product Model
+## Current State
 
-- [ ] Chốt mô hình chính thức:
-  - user đăng ký mới sẽ được tạo `workspace` riêng
-  - user đó là `OWNER` của workspace đó
-  - user đó có đầy đủ chức năng trong phạm vi workspace như user hiện tại
-  - member được invite sẽ thuộc workspace của owner đó
-  - member được invite không tự tạo workspace riêng khi nhận lời mời
+### What the code already supports
 
-- [ ] Chốt mô hình quyền:
-  - owner có quyền quản lý pages, spaces, groups, members, shares, workspace settings
-  - owner không có quyền bootstrap hệ thống, env config, domain config toàn hệ thống, hay các chức năng vận hành instance
+- `users.workspaceId` already exists
+- workspace creation already exists
+- owner role assignment already exists
+- invite-member flow already exists
+- pages already belong to `workspaceId` and `spaceId`
 
-## Phase 1: Registration And Workspace Ownership
+### What the code does not support yet
+
+- self-host request routing is still pinned to the first workspace
+- self-host does not yet resolve workspace per registered user
+- registered user onboarding is not yet a standard public register flow
+- system-level `Super User` management does not exist
+- system user management does not distinguish registered users from invited members
+
+## Target Model
+
+### Registered User
+
+- each registered user has exactly one dedicated workspace
+- each registered user is `OWNER` of that workspace
+- each registered user has full workspace-level features in that workspace
+- each registered user starts with their own default space inside that workspace
+- each registered user can create additional spaces inside their workspace
+- registered users are system-managed users
+
+### Invited Member
+
+- invited members belong to an existing owner's workspace
+- invited members do not create their own workspace when accepting an invite
+- invited members are managed inside the owner's workspace member area
+- invited members do not appear in system-level `User Management`
+
+### Super User
+
+- the system has one bootstrap `Super User`
+- `Super User` is a system-level role
+- `Super User` has the same workspace-level model as a normal registered user
+- `Super User` has a dedicated workspace
+- `Super User` starts with a default space in that workspace
+- `Super User` can create additional spaces in that workspace
+- `Super User` has independent workspace data and functionality, just like any other registered user
+- `Super User` manages registered users only
+- `Super User` does not manage invited members from the system user screen
+
+### Pages
+
+- pages remain workspace-scoped, not user-scoped
+- because each registered user owns a dedicated workspace, their pages become effectively personal by workspace isolation
+
+## Core Gaps To Close
+
+### Gap 1: Self-host workspace resolution
+
+Current problem:
+
+- `apps/server/src/common/middlewares/domain.middleware.ts` always binds self-host traffic to `findFirst()` workspace
+
+Impact:
+
+- self-host behaves like single-workspace mode
+- multiple registered users with dedicated workspaces cannot work correctly
+
+Required direction:
+
+- stop resolving self-host requests to the first workspace globally
+- resolve workspace based on authenticated user/session when appropriate
+- keep public/bootstrap/register routes working before authentication
+
+### Gap 2: Registered user vs invited member identity
+
+Current problem:
+
+- both registered users and invited members are just `users`
+- there is no explicit source marker
+
+Impact:
+
+- impossible to build `User Management` that lists registered users only
+- hard to enforce invite rules cleanly
+
+Required direction:
+
+- add a user origin marker
+- recommended values:
+  - `bootstrap`
+  - `register`
+  - `invite`
+
+### Gap 3: Invite conflict with `1 registered user = 1 workspace`
+
+Current problem:
+
+- invite flow can create another user in a workspace
+- there is no current rule preventing a globally registered user email from being invited elsewhere
+
+Impact:
+
+- model becomes inconsistent
+
+Required direction:
+
+- invite must be blocked if the email already belongs to a registered or bootstrap user
+- invite may only create users with source `invite`
+
+### Gap 4: Owner lifecycle
+
+Current problem:
+
+- no rule yet for what happens to a registered user's workspace if that registered user is deactivated or deleted by `Super User`
+
+Impact:
+
+- high risk of orphaned workspace state
+
+Required direction:
+
+- do not hard delete in the first implementation
+- recommended first rule:
+  - deactivate registered owner => suspend workspace
+  - delete registered owner => soft delete user + archive or suspend workspace
+
+## Schema Changes
 
 ### Goal
 
-- [ ] User mới đăng ký sẽ có workspace riêng
-- [ ] User mới trở thành `OWNER`
-- [ ] User mới được login ngay và dùng đầy đủ chức năng trong workspace của mình
-- [ ] Flow invite member hiện tại vẫn hoạt động
+- add the minimum data model needed to support the target behavior cleanly
+
+### Tasks
+
+- [ ] Add schema support for user source classification
+- [ ] Recommended field:
+  - `registrationSource = bootstrap | register | invite`
+
+- [ ] Add schema support for `Super User`
+- [ ] Choose one:
+  - `isSuperUser`
+  - system role column
+
+- [ ] Add or confirm workspace lifecycle fields needed for admin actions
+- [ ] Reuse or extend workspace status model if possible
+
+- [ ] Create database migrations for all new fields
+- [ ] Regenerate database typings/codegen
+- [ ] Update entity typings and repo assumptions
+- [ ] Update repository query filters and select payloads to respect:
+  - `registrationSource`
+  - `isSuperUser` or system role
+  - workspace lifecycle status
+
+### Acceptance Criteria
+
+- [ ] backend can distinguish bootstrap/register/invite users
+- [ ] backend can identify `Super User`
+- [ ] backend can persist workspace lifecycle state needed for suspension/archive
+
+## Phase 0: Architecture Foundation
+
+### Goal
+
+- make the backend capable of resolving the correct workspace model before adding register flow
+
+### Tasks
+
+- [ ] Refactor `apps/server/src/common/middlewares/domain.middleware.ts`
+- [ ] Remove self-host assumption that every request uses the first workspace
+- [ ] Define routing rules for:
+  - public bootstrap routes
+  - public register routes
+  - public login routes
+  - authenticated routes
+
+- [ ] Decide self-host workspace resolution strategy
+- [ ] Recommended direction:
+  - unauthenticated public routes may run without fixed workspace
+  - authenticated routes resolve workspace from authenticated user
+  - workspace-specific public routes resolve from explicit identifier when needed
+
+- [ ] Add route-by-route impact review for workspace resolution
+- [ ] Explicitly verify behavior for:
+  - `/auth/login`
+  - `/auth/register`
+  - `/auth/setup` or bootstrap route
+  - `/users/me`
+  - `/workspace/public`
+  - invite accept/info routes
+  - Google OAuth entry/callback routes
+  - space routes
+  - page routes
+  - comment routes
+  - attachment routes
+  - search routes
+
+- [ ] Review `apps/server/src/common/guards/jwt-auth.guard.ts`
+- [ ] Ensure JWT/session flow still works once self-host is no longer first-workspace-only
+
+- [ ] Verify current `/users/me` and workspace loading flow still work after middleware changes
+
+### Acceptance Criteria
+
+- [ ] self-host is no longer globally pinned to the first workspace
+- [ ] authenticated user requests resolve into the correct workspace
+- [ ] public routes still work without breaking bootstrap/register/login
+
+## Phase 1: Bootstrap Super User
+
+### Goal
+
+- create the first system-level admin entry point safely
+
+### Tasks
+
+- [ ] Define `Super User` storage model
+- [ ] Choose one of:
+  - `isSuperUser`
+  - dedicated system role
+
+- [ ] Add user source marker
+- [ ] Recommended field:
+  - `registrationSource = bootstrap | register | invite`
+
+- [ ] Create bootstrap flow for initial `Super User`
+- [ ] Choose one path:
+  - one-time setup endpoint
+  - bootstrap command
+  - guarded setup UI
+
+- [ ] Ensure bootstrap runs only if no `Super User` exists
+- [ ] Bootstrap result:
+  - create `Super User`
+  - create dedicated workspace
+  - create default space in that workspace
+  - assign `OWNER` in that workspace
+  - mark source as `bootstrap`
+
+### Acceptance Criteria
+
+- [ ] the system can create the first `Super User` exactly once
+- [ ] `Super User` has its own workspace
+- [ ] `Super User` has a default space in that workspace
+- [ ] `Super User` can create additional spaces like any registered user
+- [ ] repeated bootstrap attempts are blocked
+
+## Phase 2: Registered User Signup
+
+### Goal
+
+- let normal users register and receive their own workspace automatically
+- each registered user should start with a default space in that workspace
+- each registered user should be able to create more spaces after signup
 
 ### Backend
 
-- [ ] Tạo DTO mới `apps/server/src/core/auth/dto/register-user.dto.ts`
-- [ ] DTO cần có:
+- [ ] Create `apps/server/src/core/auth/dto/register-user.dto.ts`
+- [ ] DTO fields:
   - `name`
   - `email`
   - `password`
@@ -33,176 +265,167 @@
   - `hostname?`
 
 - [ ] Refactor `apps/server/src/core/auth/services/signup.service.ts`
-- [ ] Tách rõ 2 flow:
+- [ ] Separate flows clearly:
+  - `bootstrapSuperUser(...)`
   - `registerOwnerWithWorkspace(...)`
-  - `signupToWorkspace(...)` hoặc giữ `signup(...)` cho invite/member
+  - `signupToWorkspace(...)` for invited members
 
-- [ ] Trong `registerOwnerWithWorkspace(...)`:
-  - tạo user mới
+- [ ] In `registerOwnerWithWorkspace(...)`:
+  - create user
   - set role `OWNER`
-  - tạo workspace
-  - gán `workspaceId` cho user
-  - tạo default group
-  - tạo default space
-  - add owner vào default group
-  - add owner vào default space
-  - return `{ user, workspace }`
+  - set source `register`
+  - create dedicated workspace
+  - attach `workspaceId`
+  - create default group
+  - create default space for that registered user's workspace
+  - add owner to default group
+  - add owner to default space
 
-- [ ] Thêm check email global ở `apps/server/src/database/repos/user/user.repo.ts`
-- [ ] Tạo method kiểu `findByEmailGlobal(email)`
-- [ ] Dùng check này để chặn 1 email đăng ký nhiều workspace nếu muốn giữ mô hình `1 user = 1 workspace`
+- [ ] Add global email lookup in `apps/server/src/database/repos/user/user.repo.ts`
+- [ ] Add method like `findByEmailGlobal(email)`
+- [ ] Block registration if the email already belongs to:
+  - `bootstrap` user
+  - `register` user
+- [ ] Decide and implement DB-level uniqueness strategy for registered/bootstrap emails
+- [ ] Recommended direction:
+  - prevent duplicate registered/bootstrap accounts at the database layer
+  - keep invite-only users excluded from that uniqueness rule if the schema requires it
 
-- [ ] Sửa `apps/server/src/core/auth/services/auth.service.ts`
-- [ ] Thêm method `registerOwner(...)`
-- [ ] Sau khi đăng ký thành công:
-  - generate auth token
-  - return auth token + workspace
+- [ ] Update `apps/server/src/core/auth/services/auth.service.ts`
+- [ ] Add `registerOwner(...)`
 
-- [ ] Sửa `apps/server/src/core/auth/auth.controller.ts`
-- [ ] Thêm endpoint `POST /auth/register`
-- [ ] Endpoint này phải:
+- [ ] Update `apps/server/src/core/auth/auth.controller.ts`
+- [ ] Add `POST /auth/register`
+- [ ] Endpoint behavior:
   - public
-  - không dùng `SetupGuard`
-  - set auth cookie
-  - return workspace hoặc payload tương ứng
+  - sets auth cookie
+  - returns workspace payload
 
 ### Frontend
 
-- [ ] Sửa `apps/client/src/features/auth/types/auth.types.ts`
-- [ ] Thêm type cho register
+- [ ] Add register types in `apps/client/src/features/auth/types/auth.types.ts`
+- [ ] Add register API in `apps/client/src/features/auth/services/auth-service.ts`
+- [ ] Add `signUp()` in `apps/client/src/features/auth/hooks/use-auth.ts`
+- [ ] Create `apps/client/src/features/auth/components/sign-up-form.tsx`
+- [ ] Create `apps/client/src/pages/auth/signup.tsx`
+- [ ] Mount `/signup` in `apps/client/src/App.tsx`
+- [ ] Add signup CTA in login form
 
-- [ ] Sửa `apps/client/src/features/auth/services/auth-service.ts`
-- [ ] Thêm hàm `register()`
+### Google OAuth
 
-- [ ] Sửa `apps/client/src/features/auth/hooks/use-auth.ts`
-- [ ] Thêm handler `signUp()`
-- [ ] Sau khi signup thành công:
-  - redirect `/home`
-  - user vào workspace mới tạo của chính họ
+- [ ] Support register/login by Google OAuth
+- [ ] Add backend Google OAuth strategy and callback flow
+- [ ] Add env support for:
+  - `GOOGLE_CLIENT_ID`
+  - `GOOGLE_CLIENT_SECRET`
+  - `GOOGLE_CALLBACK_URL`
+- [ ] Google flow rules:
+  - if email belongs to an existing registered/bootstrap user => login existing account
+  - if email does not exist => create registered user + dedicated workspace
+  - if email belongs to invite-only user => must follow an explicit rule
 
-- [ ] Tạo `apps/client/src/features/auth/components/sign-up-form.tsx`
-- [ ] Form gồm:
-  - name
-  - email
-  - password
-  - workspace name
-  - hostname nếu cần
+- [ ] Chốt rule Google OAuth for invite-only users
+- [ ] Choose one:
+  - block Google OAuth for invite-only email
+  - upgrade invite-only user into registered user
+  - merge invite-only user into registered flow with a one-time migration
 
-- [ ] Tạo `apps/client/src/pages/auth/signup.tsx`
-- [ ] Mount route `/signup` trong `apps/client/src/App.tsx`
-- [ ] Dùng route constant có sẵn trong `apps/client/src/lib/app-route.ts`
-
-- [ ] Cập nhật `apps/client/src/features/auth/components/login-form.tsx`
-- [ ] Thêm CTA:
-  - `Sign up`
-  - mô tả rõ là sẽ tạo workspace riêng
-
-### Invite Member
-
-- [ ] Giữ lại flow invite member hiện có
-- [ ] Xác nhận lại nghiệp vụ:
-  - owner của workspace có thể invite member vào workspace của mình
-  - member được invite là user phụ thuộc workspace đó
-  - member không có workspace riêng nếu vào bằng invite
-
-- [ ] Rà `apps/server/src/core/workspace/services/workspace-invitation.service.ts`
-- [ ] Đảm bảo flow invite vẫn đúng sau refactor signup:
-  - không tạo workspace mới
-  - tạo user trong workspace hiện tại
-  - gán role theo invitation
-  - add default group
-  - add groupIds được chỉ định trong invitation
-
-- [ ] Tách rõ naming để tránh lẫn:
-  - register owner = tạo workspace riêng
-  - accept invite = tạo member trong workspace owner
-
-- [ ] Rà UI member management
-- [ ] Xác nhận owner vẫn có đầy đủ chức năng:
-  - create invite
-  - resend invite
-  - revoke invite
-  - activate/deactivate member
-  - change member role
+- [ ] Do not implement Google OAuth fully until the invite-only rule is chosen
 
 ### Acceptance Criteria
 
-- [ ] Một user mới có thể đăng ký
-- [ ] User đó có workspace riêng
-- [ ] User đó là `OWNER`
-- [ ] User đó đăng nhập ngay sau khi đăng ký
-- [ ] Owner vẫn invite member bình thường
-- [ ] Member được invite không tạo workspace riêng
+- [ ] registered user gets dedicated workspace
+- [ ] registered user is `OWNER`
+- [ ] registered user gets a default space in their workspace
+- [ ] registered user can create additional spaces in that workspace
+- [ ] registered user gets full workspace-level functionality
+- [ ] login works after register
+- [ ] Google OAuth follows the same workspace-per-user rule
 
-## Phase 2: Super User
+## Phase 3: Invite Member Flow Hardening
 
 ### Goal
 
-- [ ] User đầu tiên đăng ký trong hệ thống sẽ là `Super User`
-- [ ] `Super User` vẫn có workspace riêng và vẫn là `OWNER` của workspace đó
-- [ ] `Super User` có thêm quyền quản lý user toàn hệ thống
+- keep invite flow, but make it consistent with the new registered-user model
 
-### Backend
+### Tasks
 
-- [ ] Chốt cách lưu quyền `Super User`
-- [ ] Chọn 1 hướng:
-  - field như `isSuperUser`
-  - hoặc system role riêng
+- [ ] Update `apps/server/src/core/workspace/services/workspace-invitation.service.ts`
+- [ ] Keep invited users as workspace members only
+- [ ] Mark invited users with source `invite`
 
-- [ ] Thêm cách xác định user đầu tiên trong hệ thống
-- [ ] Có thể cần:
-  - method đếm tổng user toàn hệ thống
-  - hoặc query kiểm tra đã có `Super User` chưa
+- [ ] Add invite eligibility rule:
+  - block invite if email already belongs to `bootstrap` or `register` user
 
-- [ ] Cập nhật `registerOwnerWithWorkspace(...)`
-- [ ] Nếu là user đầu tiên:
-  - gắn quyền `Super User`
+- [ ] Keep invited member behavior:
+  - no dedicated workspace creation
+  - role comes from invitation
+  - default group membership still works
+  - invitation groups still work
 
-- [ ] Rà quyền backend
-- [ ] Xác nhận:
-  - owner thường không có quyền hệ thống
-  - `Super User` có quyền hệ thống cần thiết cho quản lý user
-
-### Frontend
-
-- [ ] Mở rộng current user payload nếu cần để biết user có phải `Super User` không
-- [ ] Đảm bảo UI có thể conditionally render các phần dành riêng cho `Super User`
+- [ ] Review workspace member UI and API to ensure owner can still:
+  - invite
+  - resend
+  - revoke
+  - deactivate
+  - activate
+  - change role
 
 ### Acceptance Criteria
 
-- [ ] User đầu tiên là `Super User`
-- [ ] User thứ hai không tự động là `Super User`
-- [ ] Owner thường và `Super User` được phân biệt rõ
+- [ ] invited members still work
+- [ ] invited members do not create workspaces
+- [ ] registered users cannot be re-created as invited members in another workspace
 
-## Phase 3: System User Management
+## Phase 4: Super User Permissions
 
 ### Goal
 
-- [ ] Thêm menu `User Management` trong settings
-- [ ] Chỉ `Super User` mới nhìn thấy menu này
-- [ ] `Super User` có thể liệt kê user đã đăng ký, deactivate, activate, delete
+- separate workspace owner powers from system-level user powers
+
+### Tasks
+
+- [ ] Review backend guards and permission checks
+- [ ] Ensure owner cannot access system-only APIs
+- [ ] Ensure `Super User` can access system-only APIs
+
+- [ ] Expose `Super User` status in current-user payload where needed
+- [ ] Allow frontend to conditionally render system-only menu items
+
+### Acceptance Criteria
+
+- [ ] owner has full workspace powers only
+- [ ] `Super User` has system-level user management access
+- [ ] owner cannot call system user management APIs
+
+## Phase 5: System User Management
+
+### Goal
+
+- allow `Super User` to manage registered users only
 
 ### Backend
 
-- [ ] Thêm API quản lý user toàn hệ thống
-- [ ] Chức năng tối thiểu:
-  - liệt kê các user đã đăng ký
-  - deactivate user
-  - activate user
-  - delete user
+- [ ] Add system user management APIs
+- [ ] Minimum actions:
+  - list registered users
+  - deactivate registered user
+  - activate registered user
+  - delete registered user
 
-- [ ] Gợi ý endpoint:
+- [ ] Recommended endpoints:
   - `POST /system/users`
   - `POST /system/users/deactivate`
   - `POST /system/users/activate`
   - `POST /system/users/delete`
 
-- [ ] Các API này phải:
-  - chỉ cho `Super User`
-  - chặn owner thường
-  - có audit log
+- [ ] List query must include only:
+  - source `bootstrap`
+  - source `register`
+- [ ] List query must exclude:
+  - source `invite`
 
-- [ ] Dữ liệu list user nên có:
+- [ ] Include these fields:
   - user id
   - name
   - email
@@ -210,158 +433,144 @@
   - workspace name
   - workspace role
   - `isSuperUser`
-  - trạng thái active/deactivated
+  - status
   - `createdAt`
   - `lastLoginAt`
 
-- [ ] Rule an toàn:
-  - không cho deactivate `Super User` cuối cùng
-  - không cho delete `Super User` cuối cùng
-  - không cho tự xóa chính mình nếu đó là admin hệ thống duy nhất
+- [ ] Add safety rules:
+  - cannot deactivate last `Super User`
+  - cannot delete last `Super User`
+  - cannot hard delete in first release
+  - deactivating registered owner suspends workspace
+  - deleting registered owner soft deletes user and archives or suspends workspace
+
+- [ ] Add explicit owner lifecycle implementation tasks
+- [ ] When registered owner is deactivated:
+  - update workspace status to suspended or equivalent
+  - block normal access to that workspace
+  - define behavior for invited members in that workspace
+- [ ] Add backend enforcement so suspended workspaces are rejected consistently by guards, middleware, or service layer
+
+- [ ] When registered owner is deleted:
+  - soft delete user
+  - archive or suspend workspace
+  - keep audit trail
+  - define behavior for invited members in that workspace
+
+- [ ] Review login/session behavior for suspended workspace
+- [ ] Decide frontend response for suspended workspace
+- [ ] Decide whether invited members can still access suspended workspace
 
 ### Frontend
 
-- [ ] Thêm menu mới trong settings:
-  - `User Management`
-  - menu này chỉ hiển thị cho `Super User`
+- [ ] Add `User Management` menu in settings
+- [ ] Show only for `Super User`
 
-- [ ] Tạo trang quản lý user hệ thống
-- [ ] Chức năng của trang:
-  - liệt kê các user đã đăng ký
-  - tìm kiếm theo tên hoặc email
-  - deactivate user
-  - activate user
-  - delete user
+- [ ] Add route and menu wiring tasks explicitly
+- [ ] Define route path for `User Management`
+- [ ] Update settings sidebar visibility rules
+- [ ] Add frontend query/service layer for system user list and actions
 
-- [ ] UI list nên hiển thị:
-  - name
-  - email
-  - workspace
-  - role
-  - trạng thái
-  - ngày tạo
-  - lần đăng nhập cuối
-  - badge `Super User`
-
-- [ ] Cập nhật route trong `apps/client/src/App.tsx`
-- [ ] Cập nhật settings sidebar để hiện menu `User Management` khi user là `Super User`
-
-- [ ] Thêm confirm modal cho action nguy hiểm:
+- [ ] Create system user management page
+- [ ] Features:
+  - list registered users
+  - search by name or email
   - deactivate
+  - activate
   - delete
+
+- [ ] Explicitly do not show invited members here
+- [ ] Invited members remain managed in workspace member screens
+- [ ] Keep existing workspace member screens as the only place where owners manage invited members
+
+- [ ] Add suspended-workspace frontend handling if owner lifecycle policy requires it
 
 ### Acceptance Criteria
 
-- [ ] `Super User` thấy menu `User Management`
-- [ ] `Super User` xem được danh sách user
-- [ ] `Super User` deactivate/activate/delete được user theo rule đã chốt
-- [ ] Owner thường không thấy menu này
-- [ ] Owner thường bị chặn nếu gọi API hệ thống
+- [ ] `Super User` can manage registered users
+- [ ] invited members do not appear in system user management
+- [ ] owner cannot access this screen or API
 
-## Cross-Cutting Review
+## Phase 6: Cross-Cutting Cleanup
 
-### Permissions Review
+### Naming
 
-- [ ] Rà các route/settings để xác nhận owner có đầy đủ chức năng workspace-level
-- [ ] Rà các route/settings để xác nhận owner không chạm vào system-level settings
+- [ ] Rename misleading setup-oriented names
+- [ ] Avoid using bootstrap DTO names for normal registration
+- [ ] Keep flow names explicit:
+  - bootstrap
+  - register
+  - invite
 
-- [ ] Kiểm tra tối thiểu các khu vực sau:
-  - workspace settings
-  - members
-  - groups
-  - spaces
-  - sharing
-  - account profile
-  - password
-  - auth/session
+### Validation
 
-- [ ] Kiểm tra các thứ ngoài phạm vi owner:
-  - setup/bootstrap
-  - domain/app env toàn hệ thống
-  - system instance configuration
+- [ ] Normalize email lowercase everywhere
+- [ ] block duplicate registered user emails globally
+- [ ] block duplicate hostname
+- [ ] validate reserved hostname
+- [ ] rate-limit register flow
 
-- [ ] Rà quyền `Super User` riêng:
-  - thấy menu `User Management`
-  - gọi được API list, activate, deactivate, delete user
-  - owner thường không thấy menu này
-  - owner thường bị chặn ở backend nếu gọi API hệ thống
+### Optional Later Work
 
-### Naming Cleanup
-
-- [ ] Đổi tên `initialSetup()` trong `apps/server/src/core/auth/services/signup.service.ts`
-- [ ] Không dùng tên mang nghĩa bootstrap cho flow product registration nữa
-
-- [ ] Hạn chế reuse `CreateAdminUserDto` cho signup flow mới
-- [ ] Nếu cần, tạo DTO riêng cho register để code dễ đọc hơn
-
-- [ ] Ghi chú trong code:
-  - `setup` là legacy bootstrap
-  - `register` là onboarding chính thức
-  - `invite` là tạo member trong workspace có sẵn
-
-### Validation And Safety
-
-- [ ] Chặn duplicate email theo rule đã chốt
-- [ ] Chặn duplicate hostname
-- [ ] Validate reserved hostname
-- [ ] Chuẩn hóa email lowercase
-- [ ] Rate limit endpoint register
-- [ ] Hiển thị lỗi rõ ràng khi signup fail
-
-- [ ] Nếu cần phase sau:
-  - email verification
-  - anti-spam
-  - captcha
+- [ ] email verification
+- [ ] spam protection
+- [ ] captcha
+- [ ] stronger workspace suspension policy
 
 ## Tests
 
+### Phase 0
+
+- [ ] self-host no longer binds every request to first workspace
+- [ ] authenticated requests resolve correct workspace
+
 ### Phase 1
 
-- [ ] test register thành công tạo user
-- [ ] test register thành công tạo workspace
-- [ ] test register set owner role
-- [ ] test register tạo default group
-- [ ] test register tạo default space
-- [ ] test register set auth cookie
-- [ ] test duplicate email bị chặn
-- [ ] test duplicate hostname bị chặn
-- [ ] test invite member vẫn tạo user trong workspace hiện tại
-- [ ] test invite member không tạo workspace mới
-- [ ] test signup page render đúng
-- [ ] test signup validation đúng
-- [ ] test signup thành công redirect `/home`
-- [ ] test login có link tới signup
-- [ ] test invite signup vẫn hoạt động
+- [ ] bootstrap creates first `Super User`
+- [ ] bootstrap cannot run twice
 
 ### Phase 2
 
-- [ ] test user đầu tiên trở thành `Super User`
-- [ ] test user thứ hai không phải `Super User`
+- [ ] register creates user
+- [ ] register creates dedicated workspace
+- [ ] register assigns owner role
+- [ ] register creates default group and space
+- [ ] registered user can create additional spaces after signup
+- [ ] register sets auth cookie
+- [ ] duplicate registered email is blocked
+- [ ] duplicate hostname is blocked
+- [ ] Google OAuth register creates workspace correctly
+- [ ] Google OAuth login reuses existing registered account correctly
 
 ### Phase 3
 
-- [ ] test list user hệ thống chỉ cho `Super User`
-- [ ] test deactivate user hệ thống hoạt động
-- [ ] test activate user hệ thống hoạt động
-- [ ] test delete user hệ thống hoạt động
-- [ ] test không thể deactivate `Super User` cuối cùng
-- [ ] test không thể delete `Super User` cuối cùng
-- [ ] test chỉ `Super User` thấy menu `User Management`
-- [ ] test trang `User Management` render danh sách user
-- [ ] test action deactivate, activate, delete gọi đúng API
+- [ ] invite creates workspace member only
+- [ ] invite does not create workspace
+- [ ] invite is blocked for email already used by registered/bootstrap user
 
-### Verification
+### Phase 4
 
-- [ ] `client` build pass
-- [ ] `server` build pass
-- [ ] login vẫn hoạt động
-- [ ] forgot-password vẫn hoạt động
-- [ ] invite member vẫn hoạt động
+- [ ] owner cannot access system APIs
+- [ ] `Super User` can access system APIs
+
+### Phase 5
+
+- [ ] user management list shows only bootstrap/register users
+- [ ] invited members never appear there
+- [ ] deactivate registered user works
+- [ ] activate registered user works
+- [ ] delete registered user works as soft delete
+- [ ] deactivating owner changes workspace status correctly
+- [ ] deleting owner changes workspace status correctly
+- [ ] cannot deactivate last `Super User`
+- [ ] cannot delete last `Super User`
 
 ## Recommended Execution Order
 
-- [ ] Bước 1: hoàn thành Phase 1
-- [ ] Bước 2: hoàn thành Phase 2
-- [ ] Bước 3: hoàn thành Phase 3
-- [ ] Bước 4: review permissions và naming cleanup
-- [ ] Bước 5: hoàn thiện test và verification
+- [ ] Bước 1: Phase 0
+- [ ] Bước 2: Phase 1
+- [ ] Bước 3: Phase 2
+- [ ] Bước 4: Phase 3
+- [ ] Bước 5: Phase 4
+- [ ] Bước 6: Phase 5
+- [ ] Bước 7: Phase 6

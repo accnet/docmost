@@ -5,6 +5,8 @@ export interface IUser {
   name: string;
   email: string;
   emailVerifiedAt: Date;
+  registrationSource?: string;
+  isSuperUser?: boolean;
   avatarUrl: string;
   timezone: string;
   settings: IUserSettings;
@@ -21,6 +23,11 @@ export interface IUser {
   fullPageWidth: boolean; // used for update
   pageEditMode: string; // used for update
   hasGeneratedPassword?: boolean;
+}
+
+export interface ISystemUser extends IUser {
+  workspaceName?: string;
+  workspaceStatus?: string;
 }
 
 export interface ICurrentUser {

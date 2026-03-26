@@ -19,13 +19,15 @@ const APP_ROUTE = {
       PROFILE: "/settings/account/profile",
       PREFERENCES: "/settings/account/preferences",
     },
+    SYSTEM: {
+      USERS: "/settings/system/users",
+    },
     WORKSPACE: {
       GENERAL: "/settings/workspace",
       MEMBERS: "/settings/members",
       GROUPS: "/settings/groups",
       SPACES: "/settings/spaces",
       BILLING: "/settings/billing",
-      SECURITY: "/settings/security",
     },
   },
 };

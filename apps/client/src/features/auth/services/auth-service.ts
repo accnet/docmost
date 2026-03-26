@@ -6,6 +6,7 @@ import {
   ILogin,
   ILoginResponse,
   IPasswordReset,
+  IRegister,
   ISetupWorkspace,
   IVerifyUserToken,
 } from "@/features/auth/types/auth.types";
@@ -34,6 +35,16 @@ export async function setupWorkspace(
   return req.data;
 }
 
+export async function register(data: IRegister): Promise<IWorkspace> {
+  const req = await api.post<IWorkspace>("/auth/register", data);
+  return req.data;
+}
+
+export async function getSetupStatus(): Promise<{ isSetupComplete: boolean }> {
+  const req = await api.get<{ isSetupComplete: boolean }>("/auth/setup-status");
+  return "data" in (req as any) ? (req as any).data : (req as any);
+}
+
 export async function forgotPassword(data: IForgotPassword): Promise<void> {
   await api.post<void>("/auth/forgot-password", data);
 }
@@ -51,4 +62,3 @@ export async function getCollabToken(): Promise<ICollabToken> {
   const req = await api.post<ICollabToken>("/auth/collab-token");
   return req.data;
 }
-

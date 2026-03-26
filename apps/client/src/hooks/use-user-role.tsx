@@ -12,8 +12,9 @@ export const useUserRole = () => {
   const isOwner = currentUser?.user?.role === UserRole.OWNER;
 
   const isMember = currentUser?.user?.role === UserRole.MEMBER;
+  const isSuperUser = currentUser?.user?.isSuperUser === true;
 
-  return { isAdmin, isOwner, isMember };
+  return { isAdmin, isOwner, isMember, isSuperUser };
 };
 
 export default useUserRole;

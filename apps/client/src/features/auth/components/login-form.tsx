@@ -18,10 +18,9 @@ import { Link } from "react-router-dom";
 import APP_ROUTE from "@/lib/app-route.ts";
 import { useTranslation } from "react-i18next";
 import SsoLogin from "@/oss/components/sso-login.tsx";
-import { useWorkspacePublicDataQuery } from "@/features/workspace/queries/workspace-query.ts";
-import { Error404 } from "@/components/ui/error-404.tsx";
 import React from "react";
 import { AuthLayout } from "./auth-layout.tsx";
+import { isCloud } from "@/lib/config.ts";
 
 const formSchema = z.object({
   email: z
@@ -35,12 +34,6 @@ export function LoginForm() {
   const { t } = useTranslation();
   const { signIn, isLoading } = useAuth();
   useRedirectIfAuthenticated();
-  const {
-    data,
-    isLoading: isDataLoading,
-    isError,
-    error,
-  } = useWorkspacePublicDataQuery();
 
   const form = useForm<FormValues>({
     validate: zod4Resolver(formSchema),
@@ -54,14 +47,6 @@ export function LoginForm() {
     await signIn(data);
   }
 
-  if (isDataLoading) {
-   return null;
-  }
-
-  if (isError && error?.["response"]?.status === 404) {
-    return <Error404 />;
-  }
-
   return (
     <AuthLayout>
       <Container size={420} className={classes.container}>
@@ -72,42 +57,51 @@ export function LoginForm() {
 
           <SsoLogin />
 
-          {!data?.enforceSso && (
-            <>
-              <form onSubmit={form.onSubmit(onSubmit)}>
-                <TextInput
-                  id="email"
-                  type="email"
-                  label={t("Email")}
-                  placeholder="email@example.com"
-                  variant="filled"
-                  {...form.getInputProps("email")}
-                />
+          <form onSubmit={form.onSubmit(onSubmit)}>
+            <TextInput
+              id="email"
+              type="email"
+              label={t("Email")}
+              placeholder="email@example.com"
+              variant="filled"
+              {...form.getInputProps("email")}
+            />
 
-                <PasswordInput
-                  label={t("Password")}
-                  placeholder={t("Your password")}
-                  variant="filled"
-                  mt="md"
-                  {...form.getInputProps("password")}
-                />
+            <PasswordInput
+              label={t("Password")}
+              placeholder={t("Your password")}
+              variant="filled"
+              mt="md"
+              {...form.getInputProps("password")}
+            />
 
-                <Group justify="flex-end" mt="sm">
-                  <Anchor
-                    to={APP_ROUTE.AUTH.FORGOT_PASSWORD}
-                    component={Link}
-                    underline="never"
-                    size="sm"
-                  >
-                    {t("Forgot your password?")}
-                  </Anchor>
-                </Group>
+            <Group justify="flex-end" mt="sm">
+              <Anchor
+                to={APP_ROUTE.AUTH.FORGOT_PASSWORD}
+                component={Link}
+                underline="never"
+                size="sm"
+              >
+                {t("Forgot your password?")}
+              </Anchor>
+            </Group>
 
-                <Button type="submit" fullWidth mt="md" loading={isLoading}>
-                  {t("Sign In")}
-                </Button>
-              </form>
-            </>
+            <Button type="submit" fullWidth mt="md" loading={isLoading}>
+              {t("Sign In")}
+            </Button>
+          </form>
+
+          {!isCloud() && (
+            <Group justify="center" mt="md">
+              <Anchor
+                to={APP_ROUTE.AUTH.SIGNUP}
+                component={Link}
+                underline="never"
+                size="sm"
+              >
+                {t("Create a new workspace account")}
+              </Anchor>
+            </Group>
           )}
         </Box>
       </Container>
