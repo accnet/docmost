@@ -37,9 +37,9 @@ export class ShareService {
     private readonly tokenService: TokenService,
   ) {}
 
-  async getShareTree(shareId: string, workspaceId: string) {
+  async getShareTree(shareId: string, workspaceId?: string) {
     const share = await this.shareRepo.findById(shareId);
-    if (!share || share.workspaceId !== workspaceId) {
+    if (!share || (workspaceId && share.workspaceId !== workspaceId)) {
       throw new NotFoundException('Share not found');
     }
 
@@ -106,7 +106,7 @@ export class ShareService {
     }
   }
 
-  async getSharedPage(dto: ShareInfoDto, workspaceId: string) {
+  async getSharedPage(dto: ShareInfoDto, workspaceId?: string) {
     const share = await this.getShareForPage(dto.pageId, workspaceId);
 
     if (!share) {
@@ -134,7 +134,7 @@ export class ShareService {
     return { page, share };
   }
 
-  async getShareForPage(pageId: string, workspaceId: string) {
+  async getShareForPage(pageId: string, workspaceId?: string) {
     // here we try to check if a page was shared directly or if it inherits the share from its closest shared ancestor
     const share = await this.db
       .withRecursive('page_hierarchy', (cte) =>
@@ -192,7 +192,7 @@ export class ShareService {
       .limit(1)
       .executeTakeFirst();
 
-    if (!share || share.workspaceId !== workspaceId) {
+    if (!share || (workspaceId && share.workspaceId !== workspaceId)) {
       return undefined;
     }
 

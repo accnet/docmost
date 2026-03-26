@@ -29,6 +29,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { ShareRepo } from '@docmost/db/repos/share/share.repo';
 import { PaginationOptions } from '@docmost/db/pagination/pagination-options';
 import { LicenseCheckService } from '../../integrations/environment/license-check.service';
+import { WorkspaceRepo } from '@docmost/db/repos/workspace/workspace.repo';
 import { AuditEvent, AuditResource } from '../../common/events/audit-events';
 import {
   AUDIT_SERVICE,
@@ -45,6 +46,7 @@ export class ShareController {
     private readonly pagePermissionRepo: PagePermissionRepo,
     private readonly pageAccessService: PageAccessService,
     private readonly licenseCheckService: LicenseCheckService,
+    private readonly workspaceRepo: WorkspaceRepo,
     @Inject(AUDIT_SERVICE) private readonly auditService: IAuditService,
   ) {}
 
@@ -60,18 +62,38 @@ export class ShareController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('/page-info')
-  async getSharedPageInfo(
-    @Body() dto: ShareInfoDto,
-    @AuthWorkspace() workspace: Workspace,
-  ) {
+  async getSharedPageInfo(@Body() dto: ShareInfoDto) {
     if (!dto.pageId && !dto.shareId) {
       throw new BadRequestException();
     }
 
-    const shareData = await this.shareService.getSharedPage(dto, workspace.id);
+    let pageId = dto.pageId;
+    if (!pageId && dto.shareId) {
+      const share = await this.shareRepo.findById(dto.shareId);
+      if (!share) {
+        throw new NotFoundException('Share not found');
+      }
+      pageId = share.pageId;
+    }
+
+    const shareData = await this.shareService.getSharedPage(
+      {
+        ...dto,
+        pageId,
+      },
+      undefined,
+    );
+
+    const workspace = await this.workspaceRepo.findById(
+      shareData.share.workspaceId,
+      { withLicenseKey: true },
+    );
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
 
     const sharingAllowed = await this.shareService.isSharingAllowed(
-      workspace.id,
+      shareData.share.workspaceId,
       shareData.share.spaceId,
     );
     if (!sharingAllowed) {
@@ -238,17 +260,19 @@ export class ShareController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('/tree')
-  async getSharePageTree(
-    @Body() dto: ShareIdDto,
-    @AuthWorkspace() workspace: Workspace,
-  ) {
-    const treeData = await this.shareService.getShareTree(
-      dto.shareId,
-      workspace.id,
+  async getSharePageTree(@Body() dto: ShareIdDto) {
+    const treeData = await this.shareService.getShareTree(dto.shareId);
+
+    const workspace = await this.workspaceRepo.findById(
+      treeData.share.workspaceId,
+      { withLicenseKey: true },
     );
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
 
     const sharingAllowed = await this.shareService.isSharingAllowed(
-      workspace.id,
+      treeData.share.workspaceId,
       treeData.share.spaceId,
     );
     if (!sharingAllowed) {
